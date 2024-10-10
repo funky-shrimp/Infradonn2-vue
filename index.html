@@ -7,18 +7,6 @@
     <title>Vite App</title>
   </head>
   <body>
-    <script src="//cdn.jsdelivr.net/npm/pouchdb@8.0.1/dist/pouchdb.min.js"></script>
-    <script>
-      const $pouchDB = new PouchDB('http://localhost:5984/mydatabase')
-      
-      if ($pouchDB) {
-        console.log('Connection with PouchDB established successfully')
-        console.log($pouchDB)
-      } else {
-        console.warn('Something went wrong')
-      }
-        
-    </script>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

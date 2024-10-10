@@ -2,13 +2,6 @@
 import { RouterLink, RouterView } from 'vue-router'
 import HelloWorld from './components/HelloWorld.vue'
 
-
-// import { ref } from 'vue'
-// let status = ref(null);
-// $pouchDB.info().then(function (info) {
-//   status.value = info;
-// });
-
 </script>
 
 <template>
@@ -25,9 +18,6 @@ import HelloWorld from './components/HelloWorld.vue'
       </nav>
     </div>
 
-    <!-- <div>
-      {{ status }}
-    </div> -->
   </header>
 
   <RouterView />
