@@ -1,4 +1,5 @@
 <script lang="ts">
+import { ref } from 'vue'
 import PouchDb from 'pouchdb'
 
 declare interface docStructure {
@@ -6,7 +7,7 @@ declare interface docStructure {
   firstName: string
   lastName: string
   age: number
-  hobbys: []
+  hobbys: string[]
 }
 
 export default {
@@ -14,7 +15,10 @@ export default {
   // and will be exposed on `this`.
   data() {
     return {
-      storage: null as PouchDB.Database | null
+      peoplesData: [] as docStructure[],
+      document: null as docStructure | null,
+      storage: null as PouchDB.Database | null,
+      selected: ""
     }
   },
 
@@ -35,20 +39,67 @@ export default {
     },
 
     fetchData() {
-      this.storage?.allDocs().then(function (doc) {
-        console.log(doc)
-      })
+      const storage = ref(this.storage)
+      const self = this
+      if (storage.value) {
+        storage.value
+          .allDocs({
+            include_docs: true,
+            attachments: true
+          })
+          .then(
+            function (result: any) {
+              console.log('fetchData success', result)
+              self.peoplesData = result.rows
+            }.bind(this)
+          )
+          .catch(function (error: any) {
+            console.log('fetchData error', error)
+          })
+      }
     },
 
-    createDocument() {
+    createFakeAssDocument() {
+      this.createDocument('Fake', 'Ass', 69, ['Fake', 'Ass', 'Document'])
+      this.fetchData()
+    },
+
+    createDocument(firstName: string, lastName: string, age: number, hobbys: string[]) {
       const doc: docStructure = {
-        _id: "",
-        firstName: "",
-        lastName: "",
+        _id: '',
+        firstName: '',
+        lastName: '',
         age: 0,
         hobbys: []
       }
 
+      doc.firstName = firstName
+      doc.lastName = lastName
+      doc.age = age
+      hobbys.forEach((element: string) => {
+        doc.hobbys.push(element)
+      })
+      doc._id = new Date().toISOString()
+
+      this.storage?.put(doc)
+    },
+
+    getDocById(id: string) {
+      this.storage?.get(id).then(function (doc) {
+        return doc
+      })
+    },
+
+    stupid(event:Event){
+      try{
+        event.preventDefault()
+        console.log(event)
+      }catch(error:any){
+        console.log(error.message)
+      }
+    },
+
+    getSelectedPerson(){
       
 
     }
@@ -60,14 +111,56 @@ export default {
   mounted() {
     this.initDatabase()
     this.fetchData()
+    console.log(this.peoplesData)
   }
 }
 </script>
 
 <template>
-  <div class="couchDB">
-    <h1>CouchDB</h1>
-    <p>{{ storage }}</p>
+  <div id="dbControl">
+    <h1>Nombre de personnes: {{ peoplesData.length }}</h1>
+    <button @click="createFakeAssDocument">Create Fake Ass Document</button>
+    <form>
+      <div>
+        <label for="personId">Id</label>
+        <select v-model="selected" name="personId" id="personId">
+          <option v-for="person in peoplesData" :key="person._id" value="person._id" >
+            {{ person.doc._id }}
+          </option>
+        </select>
+      </div>
+      <div>
+        <label for="firstName">firstName</label>
+        <input type="text" id="firstName" name="firstName"/>
+      </div>
+      <div>
+        <label for="lastName">lastName</label>
+        <input type="text" id="lastName" name="lastName" />
+      </div>
+      <div>
+        <label for="age">age</label>
+        <input type="number" id="age" name="age" />
+      </div>
+      <input type="submit" name="submit" value="submit" @click="stupid"/>
+    </form>
+
+    <div id="personCard">
+      <div class="ucfirst" v-for="person in peoplesData" :key="person._id">
+        <p>Id : {{ person.doc._id }}</p>
+        <p>Prénom : {{ person.doc.firstName }}</p>
+        <p>Nom : {{ person.doc.lastName }}</p>
+        <p>Age : {{ person.doc.age }}</p>
+        <div>
+          <p>Hobbys :</p>
+
+          <ul>
+            <li v-for="(hobby, index) in person.doc.hobbys" :key="index">
+              {{ hobby }}
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -78,5 +171,30 @@ export default {
     display: flex;
     align-items: center;
   }
+}
+
+#dbControl {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+}
+#personCard {
+  display: flex;
+  flex-wrap: wrap;
+}
+.ucfirst {
+  width: 200px;
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid black;
+}
+button {
+  width: 100px;
+}
+form div {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 </style>
