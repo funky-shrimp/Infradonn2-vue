@@ -15,10 +15,16 @@ export default {
   // and will be exposed on `this`.
   data() {
     return {
+      remoteDB: 'http://localhost:5984/mydatabase',
       peoplesData: [] as docStructure[],
-      document: null as docStructure | null,
+      //document: null as docStructure | null,
       storage: null as PouchDB.Database | null,
-      selected: ""
+      selectedId: '',
+      selectedPerson: null as docStructure | any,
+      selFirName: '',
+      selLasName: '',
+      selAge: ''
+      //
     }
   },
 
@@ -26,7 +32,7 @@ export default {
   // They can be bound as event handlers in templates.
   methods: {
     initDatabase() {
-      const $pouchDB = new PouchDb('http://localhost:5984/mydatabase')
+      const $pouchDB = new PouchDb(this.remoteDB)
 
       if ($pouchDB) {
         console.log('Connection with PouchDB established successfully')
@@ -84,24 +90,75 @@ export default {
       this.storage?.put(doc)
     },
 
-    getDocById(id: string) {
-      this.storage?.get(id).then(function (doc) {
-        return doc
-      })
+    async getDocById(id: string) {
+      const doc = await this.storage?.get(id)
+      return doc
     },
 
-    stupid(event:Event){
-      try{
+    getDocByIdPromise(id: string) {
+      this.storage
+        ?.get(id)
+        .then((doc) => {
+          return doc
+        })
+        .catch((err) => {
+          console.log(err)
+        })
+    },
+
+    submit(event: Event) {
+      try {
         event.preventDefault()
-        console.log(event)
-      }catch(error:any){
+        this.selectedPerson.firstName = this.selFirName
+        this.selectedPerson.lastName = this.selLasName
+        this.selectedPerson.age = this.selAge
+        this.storage?.put(this.selectedPerson)
+      } catch (error: any) {
         console.log(error.message)
       }
     },
 
-    getSelectedPerson(){
-      
+    deletePerson(event: Event) {
+      try {
+        event.preventDefault()
+        this.storage?.remove(this.selectedPerson)
+      } catch (error: any) {
+        console.log(error.message)
+      }
+    },
 
+    updateLocalDatabase() {
+      const db = ref(this.storage).value
+      if (db) {
+        db.replicate.from
+          .bind(this)(this.remoteDB)
+          .on('complete', () => {
+            console.log('on replicate complete')
+            this.fetchData()
+          })
+          .on('error', function (error) {
+            console.log('error', error)
+          })
+      }
+    },
+
+    updateDistantDatabase() {
+      this.storage?.sync(this.remoteDB)
+        .on('complete', function () {
+          console.log("sync complete")
+        })
+        .on('error', function (err) {
+          console.log("sync incomplete",err)
+        })
+    },
+
+    async getSelectedPerson() {
+      //const a = await this.getDocById(this.selectedId);
+      //const b = this.getDocByIdPromise(this.selectedId);
+      this.selectedPerson = await this.getDocById(this.selectedId)
+      this.selFirName = this.selectedPerson?.firstName
+      this.selLasName = this.selectedPerson?.lastName
+      this.selAge = this.selectedPerson?.age
     }
   },
 
@@ -111,7 +168,6 @@ export default {
   mounted() {
     this.initDatabase()
     this.fetchData()
-    console.log(this.peoplesData)
   }
 }
 </script>
@@ -123,25 +179,26 @@ export default {
     <form>
       <div>
         <label for="personId">Id</label>
-        <select v-model="selected" name="personId" id="personId">
-          <option v-for="person in peoplesData" :key="person._id" value="person._id" >
+        <select @click="getSelectedPerson" v-model="selectedId" name="personId" id="personId">
+          <option v-for="person in peoplesData" :key="person._id">
             {{ person.doc._id }}
           </option>
         </select>
       </div>
       <div>
         <label for="firstName">firstName</label>
-        <input type="text" id="firstName" name="firstName"/>
+        <input v-model="selFirName" type="text" id="firstName" name="firstName" />
       </div>
       <div>
         <label for="lastName">lastName</label>
-        <input type="text" id="lastName" name="lastName" />
+        <input v-model="selLasName" type="text" id="lastName" name="lastName" />
       </div>
       <div>
         <label for="age">age</label>
-        <input type="number" id="age" name="age" />
+        <input v-model="selAge" type="number" id="age" name="age" />
       </div>
-      <input type="submit" name="submit" value="submit" @click="stupid"/>
+      <input type="submit" name="submit" value="submit" @click="submit" />
+      <input type="submit" name="delete" value="delete" @click="deletePerson" />
     </form>
 
     <div id="personCard">
