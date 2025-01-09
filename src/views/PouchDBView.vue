@@ -1,6 +1,6 @@
 <script lang="ts">
 import { ref } from 'vue'
-import PouchDb from 'pouchdb'
+import PouchDb, { sync } from 'pouchdb'
 
 declare interface docStructure {
   _id: string
@@ -45,6 +45,7 @@ export default {
     },
 
     fetchData() {
+      console.log('fetchData')
       const storage = ref(this.storage)
       const self = this
       if (storage.value) {
@@ -67,7 +68,6 @@ export default {
 
     createFakeAssDocument() {
       this.createDocument('Fake', 'Ass', 69, ['Fake', 'Ass', 'Document'])
-      this.fetchData()
     },
 
     createDocument(firstName: string, lastName: string, age: number, hobbys: string[]) {
@@ -88,6 +88,15 @@ export default {
       doc._id = new Date().toISOString()
 
       this.storage?.put(doc)
+      /*
+      .then(() => {
+        console.log("salut")
+        this.fetchData()
+      })
+      .catch((error) => {
+        console.log(error)
+      })
+        */
     },
 
     async getDocById(id: string) {
@@ -143,12 +152,13 @@ export default {
     },
 
     updateDistantDatabase() {
-      this.storage?.sync(this.remoteDB)
+      this.storage
+        ?.sync(this.remoteDB)
         .on('complete', function () {
-          console.log("sync complete")
+          console.log('sync complete')
         })
         .on('error', function (err) {
-          console.log("sync incomplete",err)
+          console.log('sync incomplete', err)
         })
     },
 
@@ -168,6 +178,20 @@ export default {
   mounted() {
     this.initDatabase()
     this.fetchData()
+
+    console.log(this.storage)
+
+    if (this.storage) {
+      this.storage
+        .sync(this.remoteDB, {
+          live: true,
+          retry: true
+        })
+        .on('change', (info) => {
+          console.log("change", info)
+          this.fetchData()
+        })
+    }
   }
 }
 </script>
