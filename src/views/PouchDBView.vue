@@ -1,6 +1,8 @@
 <script lang="ts">
 import { ref } from 'vue'
-import PouchDb, { sync } from 'pouchdb'
+import PouchDB from 'pouchdb'
+import findPlugin from 'pouchdb-find'
+PouchDB.plugin(findPlugin)
 
 declare interface docStructure {
   _id: string
@@ -19,6 +21,7 @@ export default {
       peoplesData: [] as docStructure[],
       //document: null as docStructure | null,
       storage: null as PouchDB.Database | null,
+      search: '',
       selectedId: '',
       selectedPerson: null as docStructure | any,
       selFirName: '',
@@ -32,20 +35,16 @@ export default {
   // They can be bound as event handlers in templates.
   methods: {
     initDatabase() {
-      const $pouchDB = new PouchDb(this.remoteDB)
+      const $pouchDB = new PouchDB('myLocalDb')
 
-      if ($pouchDB) {
+      $pouchDB.replicate.from(this.remoteDB).on('complete', () => {
         console.log('Connection with PouchDB established successfully')
-        console.log($pouchDB)
-      } else {
-        console.warn('Something went wrong')
-      }
+      })
 
       this.storage = $pouchDB
     },
 
     fetchData() {
-      console.log('fetchData')
       const storage = ref(this.storage)
       const self = this
       if (storage.value) {
@@ -56,8 +55,11 @@ export default {
           })
           .then(
             function (result: any) {
-              console.log('fetchData success', result)
-              self.peoplesData = result.rows
+              //Permet de récupéré que les informations utilisateurs
+              // contenues dans la propriété doc
+              self.peoplesData = result.rows.map((row: any) => row.doc)
+              //Enlève les index
+              self.peoplesData = self.peoplesData.filter((row) => !row.hasOwnProperty('language'))
             }.bind(this)
           )
           .catch(function (error: any) {
@@ -100,7 +102,13 @@ export default {
     },
 
     async getDocById(id: string) {
-      const doc = await this.storage?.get(id)
+      let doc = null
+      try {
+        doc = await this.storage?.get(id)
+      } catch (error: any) {
+        return null
+      }
+
       return doc
     },
 
@@ -131,6 +139,7 @@ export default {
       try {
         event.preventDefault()
         this.storage?.remove(this.selectedPerson)
+        this.selectedPerson = null
       } catch (error: any) {
         console.log(error.message)
       }
@@ -149,6 +158,23 @@ export default {
             console.log('error', error)
           })
       }
+    },
+
+    searchIndex(event: Event) {
+      event.preventDefault()
+      this.storage
+        ?.find({
+          selector: { firstName: { $regex: new RegExp(this.search, 'i') } }
+        })
+        .then((res: any) => {
+          this.peoplesData = res.docs.map((doc: any) => ({
+            ...doc, // Conserver tous les champs existants
+            _id: doc._id // Ajouter le champ 'id' égal à '_id'
+          }))
+        })
+        .catch((err: any) => {
+          console.log(err)
+        })
     },
 
     updateDistantDatabase() {
@@ -179,8 +205,6 @@ export default {
     this.initDatabase()
     this.fetchData()
 
-    console.log(this.storage)
-
     if (this.storage) {
       this.storage
         .sync(this.remoteDB, {
@@ -188,8 +212,25 @@ export default {
           retry: true
         })
         .on('change', (info) => {
-          console.log("change", info)
+          console.log('change', info)
           this.fetchData()
+        })
+        .on('error', function (err) {
+          console.log(err)
+        })
+
+      this.storage
+        .createIndex({
+          index: {
+            name: 'firstNameIndex',
+            fields: ['firstName']
+          }
+        })
+        .then(function (result) {
+          console.log('index created', result)
+        })
+        .catch(function (err) {
+          console.log(err)
         })
     }
   }
@@ -200,12 +241,18 @@ export default {
   <div id="dbControl">
     <h1>Nombre de personnes: {{ peoplesData.length }}</h1>
     <button @click="createFakeAssDocument">Create Fake Ass Document</button>
+
+    <form>
+      <input type="text" v-model="search" placeholder="Search first name" />
+      <input type="submit" value="Search" @click="searchIndex" />
+    </form>
+
     <form>
       <div>
         <label for="personId">Id</label>
         <select @click="getSelectedPerson" v-model="selectedId" name="personId" id="personId">
           <option v-for="person in peoplesData" :key="person._id">
-            {{ person.doc._id }}
+            {{ person._id }}
           </option>
         </select>
       </div>
@@ -227,15 +274,15 @@ export default {
 
     <div id="personCard">
       <div class="ucfirst" v-for="person in peoplesData" :key="person._id">
-        <p>Id : {{ person.doc._id }}</p>
-        <p>Prénom : {{ person.doc.firstName }}</p>
-        <p>Nom : {{ person.doc.lastName }}</p>
-        <p>Age : {{ person.doc.age }}</p>
+        <p>Id : {{ person._id }}</p>
+        <p>Prénom : {{ person.firstName }}</p>
+        <p>Nom : {{ person.lastName }}</p>
+        <p>Age : {{ person.age }}</p>
         <div>
           <p>Hobbys :</p>
 
           <ul>
-            <li v-for="(hobby, index) in person.doc.hobbys" :key="index">
+            <li v-for="(hobby, index) in person.hobbys" :key="index">
               {{ hobby }}
             </li>
           </ul>
