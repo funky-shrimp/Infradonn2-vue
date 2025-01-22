@@ -17,7 +17,7 @@ export default {
   // and will be exposed on `this`.
   data() {
     return {
-      remoteDB: 'http://localhost:5984/mydatabase',
+      remoteDB: 'http://root:root@localhost:5984/mydatabase',
       peoplesData: [] as docStructure[],
       //document: null as docStructure | null,
       storage: null as PouchDB.Database | null,
@@ -47,6 +47,45 @@ export default {
     fetchData() {
       const storage = ref(this.storage)
       const self = this
+
+      if (storage.value) {
+        storage.value
+          .allDocs({
+            include_docs: true,
+            attachments: true
+          })
+          .then(function (result) {
+            // Récupère uniquement les informations utilisateurs
+            self.peoplesData = result.rows.map((row) => {
+              const doc = row.doc
+
+              // Vérifie les attachements
+              if (doc._attachments) {
+                const attachmentKeys = Object.keys(doc._attachments)
+                if (attachmentKeys.length > 0) {
+                  const attachmentKey = attachmentKeys[0]
+                  const attachment = doc._attachments[attachmentKey]
+                  const attachmentData = doc._attachments[attachmentKey].data;
+                  doc.attachmentURL = `data:${doc._attachments[attachmentKey].content_type};base64,${attachmentData}`;
+                }
+              }
+
+              return doc
+            })
+
+            // Filtre les index inutiles
+            self.peoplesData = self.peoplesData.filter((row) => !row.hasOwnProperty('language'))
+          })
+          .catch(function (error) {
+            console.log('fetchData error', error)
+          })
+      }
+    },
+
+    /*
+    fetchData() {
+      const storage = ref(this.storage)
+      const self = this
       if (storage.value) {
         storage.value
           .allDocs({
@@ -67,6 +106,7 @@ export default {
           })
       }
     },
+    */
 
     createFakeAssDocument() {
       this.createDocument('Fake', 'Ass', 69, ['Fake', 'Ass', 'Document'])
@@ -90,15 +130,6 @@ export default {
       doc._id = new Date().toISOString()
 
       this.storage?.put(doc)
-      /*
-      .then(() => {
-        console.log("salut")
-        this.fetchData()
-      })
-      .catch((error) => {
-        console.log(error)
-      })
-        */
     },
 
     async getDocById(id: string) {
@@ -123,12 +154,55 @@ export default {
         })
     },
 
-    submit(event: Event) {
+    /**
+     * Gère l'ajout d'un fichier (assets)
+     * @param event
+     */
+    handleFileUpload() {
+      const fileInput = document.querySelector<HTMLInputElement>(`#attachments`)
+      const file = fileInput?.files?.[0]
+
+      if (!file) {
+        return Promise.resolve(null)
+      }
+
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+
+        reader.onload = () => {
+          const base64Data = reader.result?.toString().split(',')[1] // Extraire la partie base64
+          if (base64Data) {
+            resolve({
+              [file.name]: {
+                content_type: file.type,
+                data: base64Data
+              }
+            })
+          } else {
+            reject(new Error('File reading failed'))
+          }
+        }
+
+        reader.onerror = () => reject(new Error('File reading error'))
+        reader.readAsDataURL(file)
+      })
+    },
+
+    async submit(event: Event) {
       try {
         event.preventDefault()
+
+        // Attente des données d'attachement
+        const attachments = await this.handleFileUpload()
+
         this.selectedPerson.firstName = this.selFirName
         this.selectedPerson.lastName = this.selLasName
         this.selectedPerson.age = this.selAge
+
+        if (attachments) {
+          this.selectedPerson._attachments = attachments
+        }
+
         this.storage?.put(this.selectedPerson)
       } catch (error: any) {
         console.log(error.message)
@@ -195,9 +269,9 @@ export default {
       this.selFirName = this.selectedPerson?.firstName
       this.selLasName = this.selectedPerson?.lastName
       this.selAge = this.selectedPerson?.age
+      console.log(this.selectedPerson)
     }
   },
-
   // Lifecycle hooks are called at different stages
   // of a component's lifecycle.
   // This function will be called when the component is mounted.
@@ -268,6 +342,10 @@ export default {
         <label for="age">age</label>
         <input v-model="selAge" type="number" id="age" name="age" />
       </div>
+      <div>
+        <label for="attachments">attachments</label>
+        <input type="file" id="attachments" name="attachments" />
+      </div>
       <input type="submit" name="submit" value="submit" @click="submit" />
       <input type="submit" name="delete" value="delete" @click="deletePerson" />
     </form>
@@ -286,6 +364,10 @@ export default {
               {{ hobby }}
             </li>
           </ul>
+        </div>
+        <!-- Affiche l'image si elle existe -->
+        <div v-if="person.attachmentURL">
+          <img :src="person.attachmentURL" alt="Profile image" class="profile-image" />
         </div>
       </div>
     </div>
@@ -324,5 +406,11 @@ form div {
   flex-direction: column;
   flex-wrap: wrap;
   align-items: flex-start;
+}
+
+.profile-image {
+  width: 200px;
+  object-fit: cover;
+  margin-top: 10px;
 }
 </style>
